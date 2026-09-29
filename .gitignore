@@ -1,0 +1,14 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts (regenerate with ./packaging/build-deb.sh)
+*.deb
+packaging/vpngate-client_*/
+
+# Editor / OS leftovers
+*~
+*.bak
+*.swp
+.DS_Store

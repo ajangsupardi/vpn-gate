@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- BMW M app tile: sharp black, tunnel glyph, attached M tricolor stripe -->
+  <rect x="0" y="0" width="64" height="64" fill="#000000"/>
+  <!-- tunnel: concentric sharp squares + core dot, optical center y=24 -->
+  <rect x="17" y="9" width="30" height="30" fill="none" stroke="#ffffff" stroke-width="4"/>
+  <rect x="24" y="16" width="16" height="16" fill="none" stroke="#ffffff" stroke-width="3"/>
+  <circle cx="32" cy="24" r="3.5" fill="#ffffff"/>
+  <!-- M tricolor stripe attached to bottom edge, 6px tall -->
+  <rect x="0" y="58" width="22" height="6" fill="#0066b1"/>
+  <rect x="22" y="58" width="21" height="6" fill="#1c69d4"/>
+  <rect x="43" y="58" width="21" height="6" fill="#e22718"/>
+</svg>

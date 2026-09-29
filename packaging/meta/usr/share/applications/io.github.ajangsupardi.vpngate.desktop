@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=VPN Gate Client
+Comment=Browse and connect to free VPN Gate servers (OpenVPN, TCP:443)
+Exec=vpngate-client
+Icon=io.github.ajangsupardi.vpngate
+Terminal=false
+Categories=Network;
+Keywords=vpn;vpngate;openvpn;
+StartupWMClass=vpn-gate-client
+StartupNotify=true

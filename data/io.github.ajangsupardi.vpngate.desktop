@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=VPN Gate Client
+Comment=Browse and connect to free VPN Gate servers (OpenVPN, TCP:443)
+Exec=python3 /home/rynest/Documents/vpn-gate/vpngate_gtk.py
+Icon=/home/rynest/Documents/vpn-gate/data/io.github.ajangsupardi.vpngate.svg
+Terminal=false
+Categories=Network;
+Keywords=vpn;vpngate;openvpn;
+StartupWMClass=vpn-gate-client

@@ -1,0 +1,39 @@
+.TH VPNGATE-CLIENT 1 "September 2026" "vpngate-client 1.0" "User Commands"
+.SH NAME
+vpngate-client \- GTK4 client for free VPN Gate servers
+.SH SYNOPSIS
+.B vpngate-client
+.RI [ options ]
+.SH DESCRIPTION
+.B vpngate-client
+is a native GNOME (GTK4 + libadwaita) client for browsing public
+VPN Gate servers and connecting through NetworkManager OpenVPN.
+Credentials used are the public vpn/vpn pair published by the
+VPN Gate Academic Experiment Project, University of Tsukuba.
+.PP
+With no options it opens the graphical server browser.
+.SH OPTIONS
+.TP
+.BR \-\-list " [" \-\-country " CC] [" \-\-limit " N] [" \-\-sort " KEY] [" \-\-refresh ]
+Print the server list without a display.
+.TP
+.BR \-\-dry\-run\-host " HOST"
+Write the patched .ovpn profile for HOST and validate it.
+.TP
+.BR \-\-status
+Show the active VPN Gate connection and current public IP.
+.TP
+.BR \-\-disconnect\-all
+Remove every vpngate profile, its files, and purge leftovers.
+.SH FILES
+.TP
+.I ~/.cache/vpn-gate/
+Server list cache and generated profiles.
+.TP
+.I ~/.cert/nm-openvpn/
+Per-connection certificates staged by NetworkManager on import.
+.SH "SEE ALSO"
+.BR nmcli (1),
+.BR openvpn (8)
+.SH AUTHOR
+Local build by Ajang Supardi.

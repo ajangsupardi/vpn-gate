@@ -1,0 +1,3 @@
+#!/bin/sh
+# System launcher for VPN Gate Client (installed under /usr).
+exec python3 /usr/share/vpngate-client/vpngate_gtk.py "$@"
