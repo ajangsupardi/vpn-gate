@@ -1,9 +1,9 @@
 Package: vpngate-client
-Version: 1.0-1
+Version: 1.1-1
 Section: net
 Priority: optional
 Architecture: all
-Depends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, network-manager-openvpn, openvpn
+Depends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, network-manager-openvpn, openvpn, pkexec | policykit-1
 Maintainer: Ajang Supardi <ajangsupardi@users.noreply.github.com>
 Description: GTK4 client for free VPN Gate servers
  Browse public VPN Gate servers (country, ping, speed, score),

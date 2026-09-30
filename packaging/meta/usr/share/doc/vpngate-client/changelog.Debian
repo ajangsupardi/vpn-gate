@@ -1,0 +1,20 @@
+vpngate-client (1.1-1) unstable; urgency=medium
+
+  * Security: block IPv6 leaks on IPv4-only tunnels (ovpn pull-filter,
+    ipv6.method disabled, system sysctl with restore) with a one-shot
+    permanent sudoers setup and a styled one-time password popup.
+  * Never prompt twice: session-scoped cancel memory (one dialog max per
+    CONNECT), cert-pass-flags=not-required for unencrypted keys.
+  * Fail clean: AUTH_FAILED watcher aborts dead servers in ~1s with
+    automatic profile + IPv6 cleanup; user-friendly error lines instead
+    of raw nmcli dumps.
+
+ -- Ajang Supardi <ajangsupardi@users.noreply.github.com>  Thu, 01 Oct 2026 02:55:00 +0700
+
+vpngate-client (1.0-1) unstable; urgency=low
+
+  * Initial release: GTK4 VPN Gate server browser with
+    NetworkManager OpenVPN connect, full cleanup on disconnect,
+    BMW M dark design tokens, single CONNECT/DISCONNECT toggle.
+
+ -- Ajang Supardi <ajangsupardi@users.noreply.github.com>  Tue, 29 Sep 2026 11:03:18 +0700

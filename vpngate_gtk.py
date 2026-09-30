@@ -8,6 +8,7 @@ Styling: BMW M dark token system (black canvas, sharp corners, M stripe).
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -384,9 +385,74 @@ selection {
 .disconnected-indicator {
     color: @bmw_muted;
 }
+
+/* ── MessageDialog: BMW M voice, never stock Adwaita.
+    (Adwaita renders response buttons as pills — reset to the same sharp
+    outline rectangles used everywhere else in this app.) ── */
+.bmw-dialog {
+    background-color: @bmw_canvas;
+    background-image: none;
+    color: @bmw_ink;
+    border-radius: 0;
+    border: 1px solid @bmw_hairline;
+    box-shadow: none;
+}
+
+.bmw-dialog button,
+.bmw-dialog button.pill,
+.bmw-dialog button.suggested-action {
+    border-radius: 0;
+    background-color: transparent;
+    background-image: none;
+    color: @bmw_ink;
+    border: 1px solid @bmw_ink;
+    box-shadow: none;
+    /* Compact like the in-row CONNECT button — the response area gives
+    these buttons excess height, tamed in code (vexpand off). */
+    padding: 8px 20px;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.bmw-dialog button:hover,
+.bmw-dialog button.suggested-action:hover {
+    background-color: @bmw_ink;
+    background-image: none;
+    color: @bmw_canvas;
+    border-color: @bmw_ink;
+}
+
+.bmw-dialog button:disabled {
+    background-color: transparent;
+    background-image: none;
+    color: @bmw_muted;
+    border: 1px solid @bmw_hairline;
+}
 """
 
 # ---------------------------------------------------------------- headless ---
+def friendly_error(raw: str) -> str:
+    """Map technical failures to one short user-facing line.
+
+    Raw subprocess spew (e.g. ``Command ['nmcli', ...] timed out``) must
+    never reach the status bar — users get guidance, not tracebacks.
+    The 'No valid secrets' marker is passed through: _connect_done turns
+    it into the server-rejected message.
+    """
+    if "No valid secrets" in raw:
+        return "No valid secrets"
+    if isinstance(raw, str) and ("timed out" in raw or "TimeoutExpired" in raw):
+        return "Server not responding (connection timed out) — try another server."
+    if "import failed" in raw:
+        return "Could not build the connection profile — try another server."
+    if "ipv6.method" in raw:
+        return "Could not lock down IPv6 — try again."
+    first = raw.splitlines()[0].strip() if raw.strip() else ""
+    # Strip anything that looks like a command dump.
+    first = first.replace("Command ", "").replace("'", "")
+    return f"Connect failed ({first[:120]})." if first else "Connect failed — try another server."
+
+
 def headless_list(country: str, limit: int, sort: str, refresh: bool) -> int:
     try:
         servers = core.load(force_refresh=refresh)
@@ -439,6 +505,7 @@ def run_headless(argv: list[str]) -> int:
     if ns.status:
         print("active:", nm.active_vpngate() or "-")
         print("public ip:", nm.get_public_ip())
+        print("ipv6:", nm.ipv6_summary())
         return 0
     if ns.disconnect_all:
         print("removed:", nm.disconnect_all())
@@ -532,6 +599,9 @@ def run_gui(app_argv: list[str]) -> int:
             self.by_host: dict[str, core.Server] = {}
             self.conn_id: str | None = nm.active_vpngate()
             self.search_text = ""
+            self.connecting = False
+            self.cancelling = False
+            self.cancel_event = threading.Event()
             self.store = Gio.ListStore.new(ServerRow)
             self.filter = Gtk.CustomFilter.new(self._match, None)
             self.filter_model: Gtk.FilterListModel | None = None
@@ -724,9 +794,16 @@ def run_gui(app_argv: list[str]) -> int:
             self._refresh_conn_button()
 
         def _refresh_conn_button(self):
-            """Single CONNECT/DISCONNECT toggle, fully state-driven."""
+            """CONNECT / CANCEL / DISCONNECT toggle, fully state-driven."""
             for cls in ("suggested-action", "destructive-action"):
                 self.btn_conn.remove_css_class(cls)
+            if self.busy and self.connecting and not self.conn_id:
+                # Third state: abort an in-flight connect. Once CANCEL is
+                # clicked the button locks disabled until cleanup lands.
+                self.btn_conn.set_label("CANCEL")
+                self.btn_conn.add_css_class("destructive-action")
+                self.btn_conn.set_sensitive(not self.cancelling)
+                return
             if self.conn_id:
                 self.btn_conn.set_label("DISCONNECT")
                 self.btn_conn.add_css_class("destructive-action")
@@ -836,6 +913,13 @@ def run_gui(app_argv: list[str]) -> int:
 
         def on_conn_clicked(self, _b=None):
             if self.busy:
+                # The only clickable-busy state is CANCEL during connect.
+                # Lock the button the instant it is clicked.
+                if self.connecting and not self.conn_id and not self.cancelling:
+                    self.cancel_event.set()
+                    self.cancelling = True
+                    self.lbl_status.set_text("Cancelling…")
+                    self._refresh_conn_button()
                 return
             if self.conn_id:
                 cid = self.conn_id or nm.active_vpngate()
@@ -849,33 +933,161 @@ def run_gui(app_argv: list[str]) -> int:
             if srv is None:
                 self._toast("Select a server first")
                 return
+            # One-time password heads-up: flipping IPv6 needs elevation.
+            # If it can happen silently (sudoers rule / root), connect at
+            # once; otherwise explain the system prompt BEFORE it appears.
+            if nm.needs_password_prompt():
+                self._show_password_popup(srv)
+                return
+            self._start_connect(srv)
+
+        def _start_connect(self, srv):
+            self.connecting = True
+            self.cancelling = False
+            self.cancel_event.clear()
             self._set_busy(True, f"Connecting to {srv.host}…")
             threading.Thread(target=self._connect_job, args=(srv,), daemon=True).start()
 
+        def _show_password_popup(self, srv):
+            dlg = Adw.MessageDialog.new(
+                self.win,
+                "One-time system setup",
+                "VPN Gate Client blocks IPv6 while you are connected, "
+                "which needs system permission.\n\nChoose Continue and "
+                "enter your password one time to allow this permanently. "
+                "You will not be asked again.",
+            )
+            dlg.add_css_class("bmw-dialog")
+            dlg.add_response("cancel", "Cancel")
+            dlg.add_response("continue", "Continue")
+            # Adw.MessageDialog stretches response buttons to fill the
+            # response area (giant tall buttons). Keep them compact.
+            self._compact_dialog_buttons(dlg)
+            dlg.set_response_appearance("continue", Adw.ResponseAppearance.SUGGESTED)
+            dlg.set_default_response("continue")
+            dlg.set_close_response("cancel")
+            dlg.connect("response", self._on_password_popup, srv)
+            dlg.present()
+
+        def _on_password_popup(self, _dlg, response, srv):
+            if response != "continue":
+                return
+            self._start_connect(srv)
+
+        @staticmethod
+        def _compact_dialog_buttons(dlg):
+            """Stop Adw.MessageDialog response buttons expanding vertically."""
+            def walk(w):
+                if isinstance(w, Gtk.Button):
+                    w.set_vexpand(False)
+                    w.set_valign(Gtk.Align.CENTER)
+                child = w.get_first_child()
+                while child is not None:
+                    walk(child)
+                    child = child.get_next_sibling()
+            walk(dlg)
+
         def _connect_job(self, srv: core.Server):
+            cid = None
+            rejected = {}
+            cancel = self.cancel_event
+            # Fresh user intent: re-arm privilege prompts (one dialog max
+            # per CONNECT attempt — never a nag loop).
+            nm.reset_pkexec_decline()
             try:
                 ovpn_path, _auth = ovpn.write_profile(srv)
+                if cancel.is_set():
+                    raise nm.Cancelled("cancelled before import")
                 conn = nm.sanitize(srv.host)
                 # Remove stale profile with same name first.
                 nm.down(conn)
                 nm.delete(conn)
                 cid = nm.import_connection(ovpn_path, conn)
-                nm.up(cid, timeout=25)
+                if cancel.is_set():
+                    raise nm.Cancelled("cancelled before up")
+                # One-time permanent setup: the first Continue installs the
+                # scoped sudoers rule (one password dialog), afterwards
+                # sudo -n works forever. Cancelled/failed = connect anyway
+                # unprotected, with an honest warning via _connect_done.
+                nm.ensure_passwordless()
+                # IPv6 leak protection: tunnel is IPv4-only, so disable
+                # system IPv6 before bringing the tunnel up. A failure
+                # here is NOT fatal (fail-open would be worse UX), but the
+                # warning must reach the user via _connect_done.
+                ipv6_warn = nm.disable_ipv6()
+                # Watch for server-side AUTH_FAILED during activation: NM
+                # would otherwise loop desktop password prompts assuming the
+                # (always correct) password is wrong. Abort within ~1s.
+                stop = threading.Event()
+                def _watch():
+                    rejected["hit"] = nm.abort_on_auth_failed(cid, stop)
+                threading.Thread(target=_watch, daemon=True).start()
+                try:
+                    nm.up(cid, timeout=25, cancel=cancel)
+                finally:
+                    stop.set()
+                if cancel.is_set():
+                    raise nm.Cancelled("cancelled before verify")
                 # Routes/DNS need seconds to settle after 'up' — retry instead
                 # of freezing a "?" into the UI on the first fast failure.
-                ip = nm.get_public_ip_retry(timeout=15, attempts=3, delay=5)
-                GLib.idle_add(self._connect_done, cid, ip, "")
+                ip = nm.get_public_ip_retry(timeout=15, attempts=3, delay=5,
+                                            cancel=cancel)
+                GLib.idle_add(self._connect_done, cid, ip, "", ipv6_warn)
+            except nm.Cancelled:
+                if cid is not None:
+                    try:
+                        nm.forget_profile(cid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                GLib.idle_add(self._connect_done, None, "", "CANCELLED", "")
             except Exception as e:  # noqa: BLE001
-                GLib.idle_add(self._connect_done, None, "", str(e)[:400])
+                if cid is not None:
+                    # Failed connects never reach _disconnect_job, so clean
+                    # up here: drop the dead profile AND restore IPv6.
+                    # Otherwise every failed attempt leaks both.
+                    try:
+                        nm.forget_profile(cid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                if rejected.get("hit"):
+                    # Server refused the login — reuse the dedicated message.
+                    GLib.idle_add(self._connect_done, None, "", "No valid secrets (server rejected the login)", "")
+                else:
+                    GLib.idle_add(self._connect_done, None, "", friendly_error(str(e)), "")
 
-        def _connect_done(self, cid, ip, err):
+        def _connect_done(self, cid, ip, err, ipv6_warn=""):
             self._set_busy(False)
+            self.connecting = False
+            self.cancelling = False
             if err:
-                self.lbl_status.set_text(f"Connect failed: {err}")
-                self._toast("Connect failed — try another server")
+                if err == "CANCELLED":
+                    self.lbl_status.set_text("Cancelled — cleaned up.")
+                    self._toast("Cancelled")
+                elif "No valid secrets" in err:
+                    # Secrets are always stored+verified before 'up', so this
+                    # means the SERVER rejected the login (full/down) and NM
+                    # re-asked the desktop agent. Profile + IPv6 already
+                    # cleaned up by _connect_job — just say which server.
+                    self.lbl_status.set_text("Server rejected the login (full or down?) — cleaned up, try another server.")
+                    self._toast("Server rejected login — try another server")
+                else:
+                    # Already a friendly one-liner from friendly_error().
+                    self.lbl_status.set_text(err)
+                    self._toast("Connect failed — try another server")
                 self._refresh_conn_button()
                 return
             self.conn_id = cid
+            # IPv6 state: approved = blocked (good). Anything else means the
+            # permission was not granted — say so plainly, no sysctl jargon.
+            if ipv6_warn:
+                self.lbl_status.set_text(f"Connected: {cid} (IPv6 NOT blocked)")
+                self.lbl_ip.set_text(f"IP: {ip}" if ip != "?" else "")
+                self._toast("IPv6 is not blocked — reconnect and approve the password prompt")
+                self._refresh_conn_button()
+                if ip == "?":
+                    threading.Thread(target=self._reverify_ip_job, args=(cid,),
+                                     daemon=True).start()
+                return
             if ip == "?":
                 # Tunnel is up (NM said so) but public IP unverifiable yet —
                 # show tunnel IP as proof and keep verifying in background.
@@ -887,7 +1099,7 @@ def run_gui(app_argv: list[str]) -> int:
                                  daemon=True).start()
                 self._refresh_conn_button()
                 return
-            self.lbl_status.set_text(f"Connected: {cid}")
+            self.lbl_status.set_text(f"Connected: {cid} (IPv6 blocked)")
             self.lbl_ip.set_text(f"IP: {ip}")
             self._toast("Connected")
             self._refresh_conn_button()
@@ -922,7 +1134,7 @@ def run_gui(app_argv: list[str]) -> int:
                 self.lbl_status.set_text(f"Disconnected with leftovers: {warn[:160]}")
                 self._toast("Disconnected — some files remained, see status")
             else:
-                self.lbl_status.set_text("Disconnected — profile and files removed.")
+                self.lbl_status.set_text("Disconnected — profile and files removed, IPv6 restored.")
                 self._toast("Disconnected")
             self._refresh_conn_button()
             self._refresh_ip_label()

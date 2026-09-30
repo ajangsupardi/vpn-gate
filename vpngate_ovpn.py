@@ -26,6 +26,14 @@ FORCE_DIRECTIVES = [
     "auth SHA1",
 ]
 
+# IPv6 leak protection: VPN Gate tunnels are IPv4-only, so any IPv6 route
+# pushed by the server must be ignored — otherwise IPv6 traffic bypasses
+# the tunnel via the physical interface.
+PULL_FILTER_DIRECTIVES = [
+    'pull-filter ignore "route-ipv6"',
+    'pull-filter ignore "ifconfig-ipv6"',
+]
+
 
 def decode_config(b64: str) -> str:
     return base64.b64decode(b64.strip()).decode("utf-8", errors="replace")
@@ -61,6 +69,10 @@ def patch_config(text: str, auth_file: str | None = None) -> str:
     body += "\n# --- patched by vpn-gate-client for OpenVPN 2.6 / OpenSSL 3 ---\n"
     for d in FORCE_DIRECTIVES:
         body += d + "\n"
+    body += "# --- IPv6 leak protection (tunnel is IPv4-only) ---\n"
+    for d in PULL_FILTER_DIRECTIVES:
+        if d not in body:
+            body += d + "\n"
     return body
 
 
@@ -94,4 +106,6 @@ def validate(text: str) -> list[str]:
         problems.append("missing remote directive")
     if "data-ciphers-fallback AES-128-CBC" not in text:
         problems.append("missing legacy data-ciphers-fallback")
+    if 'pull-filter ignore "route-ipv6"' not in text:
+        problems.append("missing IPv6 pull-filter (leak risk)")
     return problems

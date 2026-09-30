@@ -1,10 +1,12 @@
 #!/bin/sh
-# Build vpngate-client_1.0-1_all.deb from this source tree.
+# Build vpngate-client_<version>_all.deb from this source tree.
+# Version is read from packaging/meta/DEBIAN/control (single source).
 # Usage: ./packaging/build-deb.sh   (run from repo root or anywhere)
 set -e
 SRC="$(dirname "$0")/.."
 OUT="$(dirname "$0")"
-PKG="$OUT/vpngate-client_1.0-1_all"
+VER="$(sed -n 's/^Version: *//p' "$SRC/packaging/meta/DEBIAN/control")"
+PKG="$OUT/vpngate-client_${VER}_all"
 
 rm -rf "$PKG"
 mkdir -p "$PKG/DEBIAN" \
@@ -18,6 +20,8 @@ mkdir -p "$PKG/DEBIAN" \
 cp "$SRC/vpngate_gtk.py" "$SRC/vpngate_core.py" \
    "$SRC/vpngate_nm.py" "$SRC/vpngate_ovpn.py" \
    "$PKG/usr/share/vpngate-client/"
+cp "$SRC/packaging/setup-nopasswd-sudo.sh" \
+   "$PKG/usr/share/vpngate-client/"
 cp "$SRC/packaging/meta/DEBIAN/control" "$PKG/DEBIAN/"
 cp "$SRC/packaging/meta/usr/bin/vpngate-client" "$PKG/usr/bin/"
 cp "$SRC/packaging/meta/usr/share/applications/io.github.ajangsupardi.vpngate.desktop" \
@@ -29,10 +33,11 @@ cp "$SRC/packaging/meta/usr/share/man/man1/vpngate-client.1" \
 gzip -9 -n -f "$PKG/usr/share/man/man1/vpngate-client.1"
 cp "$SRC/packaging/meta/usr/share/doc/vpngate-client/copyright" \
    "$PKG/usr/share/doc/vpngate-client/"
-gzip -9 -n -c "$SRC/packaging/meta/usr/share/doc/vpngate-client/changelog" \
-   > "$PKG/usr/share/doc/vpngate-client/changelog.gz"
+gzip -9 -n -c "$SRC/packaging/meta/usr/share/doc/vpngate-client/changelog.Debian" \
+   > "$PKG/usr/share/doc/vpngate-client/changelog.Debian.gz"
 
 chmod 755 "$PKG/usr/bin/vpngate-client"
+chmod 755 "$PKG/usr/share/vpngate-client/setup-nopasswd-sudo.sh"
 chmod 755 "$PKG/DEBIAN" 2>/dev/null || true
 # Normalize permissions (repo umask yields 0664/0775).
 find "$PKG" -type d -exec chmod 755 {} +
@@ -40,12 +45,12 @@ chmod 644 "$PKG/usr/share/vpngate-client/"*.py \
           "$PKG/usr/share/applications/"*.desktop \
           "$PKG/usr/share/icons/hicolor/scalable/apps/"*.svg \
           "$PKG/usr/share/doc/vpngate-client/copyright" \
-          "$PKG/usr/share/doc/vpngate-client/changelog.gz" \
+          "$PKG/usr/share/doc/vpngate-client/changelog.Debian.gz" \
           "$PKG/usr/share/man/man1/vpngate-client.1.gz"
 
 cd "$OUT"
-fakeroot dpkg-deb --build "vpngate-client_1.0-1_all"
+fakeroot dpkg-deb --build "vpngate-client_${VER}_all"
 echo "--- lintian ---"
-lintian "vpngate-client_1.0-1_all.deb" || true
+lintian "vpngate-client_${VER}_all.deb" || true
 echo "--- contents ---"
-dpkg-deb -c "vpngate-client_1.0-1_all.deb"
+dpkg-deb -c "vpngate-client_${VER}_all.deb"

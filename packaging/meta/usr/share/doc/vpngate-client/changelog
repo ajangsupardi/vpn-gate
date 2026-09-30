@@ -1,7 +1,0 @@
-vpngate-client (1.0-1) unstable; urgency=low
-
-  * Initial release: GTK4 VPN Gate server browser with
-    NetworkManager OpenVPN connect, full cleanup on disconnect,
-    BMW M dark design tokens, single CONNECT/DISCONNECT toggle.
-
- -- Ajang Supardi <ajangsupardi@users.noreply.github.com>  Tue, 29 Sep 2026 11:03:18 +0700
